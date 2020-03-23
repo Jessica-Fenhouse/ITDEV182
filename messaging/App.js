@@ -1,24 +1,27 @@
-import React from 'react';
-import { 
-  Alert, 
-  StyleSheet, 
-  Text, 
-  View,
+import {
+  Alert,
+  BackHandler,
   Image,
+  StyleSheet,
   TouchableHighlight,
-  BackHandler
+  View,
 } from 'react-native';
-import Status from './components/Status';
-import ImageGrid from "./components/ImageGrid";
+import React from 'react';
 
-import renderMessageList from './components/MessageList';
 import {
   createImageMessage,
   createLocationMessage,
   createTextMessage,
 } from './utils/MessageUtils';
+import ImageGrid from './components/ImageGrid';
+import KeyboardState from './components/KeyboardState';
+import MeasureLayout from './components/MeasureLayout';
 import MessageList from './components/MessageList';
-import Toolbar from "./components/Toolbar";
+import MessagingContainer, {
+  INPUT_METHOD,
+} from './components/MessagingContainer';
+import Status from './components/Status';
+import Toolbar from './components/Toolbar';
 
 export default class App extends React.Component {
   state = {
@@ -33,6 +36,7 @@ export default class App extends React.Component {
     ],
     fullscreenImageId: null,
     isInputFocused: false,
+    inputMethod: INPUT_METHOD.NONE,
   };
 
   componentWillMount() {
@@ -55,7 +59,7 @@ export default class App extends React.Component {
     this.subscription.remove();
   }
 
-  dismissFullScreenImage = () => {
+  dismissFullscreenImage = () => {
     this.setState({ fullscreenImageId: null });
   };
 
@@ -84,8 +88,12 @@ export default class App extends React.Component {
     });
   };
 
-  handleChangeFocus = isFocused => {
-    this.setState({ isInputFocused: isFocused });
+  handlePressImage = uri => {
+    const { messages } = this.state;
+
+    this.setState({
+      messages: [createImageMessage(uri), ...messages],
+    });
   };
 
   handleSubmit = text => {
@@ -95,6 +103,59 @@ export default class App extends React.Component {
       messages: [createTextMessage(text), ...messages],
     });
   };
+
+  handleChangeFocus = isFocused => {
+    this.setState({ isInputFocused: isFocused });
+  };
+
+  handleChangeInputMethod = inputMethod => {
+    this.setState({ inputMethod });
+  };
+
+  handlePressMessage = ({ id, type }) => {
+    switch (type) {
+      case 'text':
+        Alert.alert(
+          'Delete message?',
+          'Are you sure you want to permanently delete this message?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => {
+                const { messages } = this.state;
+                this.setState({
+                  messages: messages.filter(message => message.id !== id),
+                });
+              },
+            },
+          ],
+        );
+        break;
+      case 'image':
+        this.setState({ fullscreenImageId: id, isInputFocused: false });
+        break;
+      default:
+        break;
+    }
+  };
+
+  renderMessageList() {
+    const { messages } = this.state;
+
+    return (
+      <View style={styles.content}>
+        <MessageList
+          messages={messages}
+          onPressMessage={this.handlePressMessage}
+        />
+      </View>
+    );
+  }
 
   renderToolbar() {
     const { isInputFocused } = this.state;
@@ -118,68 +179,6 @@ export default class App extends React.Component {
     </View>
   );
 
-
-
-  handlePressMessage = ({ id, type }) => {
-    switch (type) {
-      case 'text':
-        Alert.alert(
-          "Delete message?",
-          "Are you sure you want to permanently delete this message?",
-          [
-            {
-              text: "Cancel",
-              style: 'cancel',
-            },
-            {
-              text: 'Delete',
-              style: 'destructive',
-              onPress: () => {
-                const { message } = this.state;
-                this.setState({
-                  messages: messages.filter(
-                    message => message.id !== id,
-                  ),
-                });
-              },
-            }
-          ],
-        );
-        break;
-        case 'image': 
-          this.setState ({ fullscreenImageId,
-          isInputFocused: false, });
-          break;
-        default:
-          break;
-    }
-  };
-
-  renderMessageList() {
-    const { messages } = this.state;
-
-    return (
-      <View style={styles.content}>
-        <MessageList
-          messages = {messages}
-          onPressManager={this.handlePressMessage}
-          />
-      </View>
-    );
-  }
-
-  renderInputMethodEditor() {
-    return (
-      <View style={styles.inputMethodEditor}></View>
-    );
-  }
-
-  renderToolBar(){
-    return (
-      <View style={styles.toolbar}></View>
-    );
-  }
-
   renderFullscreenImage = () => {
     const { messages, fullscreenImageId } = this.state;
 
@@ -201,14 +200,29 @@ export default class App extends React.Component {
     );
   };
 
-
   render() {
+    const { inputMethod } = this.state;
+
     return (
       <View style={styles.container}>
         <Status />
-        {this.renderMessageList()}
-        {this.renderToolBar()}
-        {this.renderInputMethodEditor()}
+        <MeasureLayout>
+          {layout => (
+            <KeyboardState layout={layout}>
+              {keyboardInfo => (
+                <MessagingContainer
+                  {...keyboardInfo}
+                  inputMethod={inputMethod}
+                  onChangeInputMethod={this.handleChangeInputMethod}
+                  renderInputMethodEditor={this.renderInputMethodEditor}
+                >
+                  {this.renderMessageList()}
+                  {this.renderToolbar()}
+                </MessagingContainer>
+              )}
+            </KeyboardState>
+          )}
+        </MeasureLayout>
         {this.renderFullscreenImage()}
       </View>
     );
@@ -218,28 +232,28 @@ export default class App extends React.Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white"
+    backgroundColor: 'white',
   },
   content: {
     flex: 1,
-    backgroundColor: "white"
+    backgroundColor: 'white',
   },
   inputMethodEditor: {
     flex: 1,
-    backgroundColor: "white"
+    backgroundColor: 'white',
   },
   toolbar: {
     borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.4)",
-    backgroundColor: "white"
+    borderTopColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: 'white',
   },
   fullscreenOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "black",
-    zIndex: 2
+    backgroundColor: 'black',
+    zIndex: 2,
   },
   fullscreenImage: {
     flex: 1,
-    resizeMode: "contain"
-  }
+    resizeMode: 'contain',
+  },
 });
